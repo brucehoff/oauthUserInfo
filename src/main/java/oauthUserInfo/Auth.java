@@ -49,32 +49,33 @@ public class Auth extends HttpServlet {
 	private static Logger logger = Logger.getLogger("Auth");
 
 	private static final String REQUIRED_SYNAPSE_TEAM_ID = "273957";
-	private static final String CLAIMS = "{\"team\":{\"values\":[\""+REQUIRED_SYNAPSE_TEAM_ID+"\"]},"
-			+ "\"userid\":{\"essential\":true}}";
+//	private static final String CLAIMS = "{\"team\":{\"values\":[\""+REQUIRED_SYNAPSE_TEAM_ID+"\"]},"
+//			+ "\"userid\":{\"essential\":true}}";
 	
-//	private static final String CLAIMS = "{\"team\":{\"values\":[\"3329051\"]},"
-//			+ "\"family_name\":{\"essential\":true},"
-//			+ "\"given_name\":{\"essential\":true},"
-//			+ "\"email\":{\"essential\":true},"
-//			+ "\"email_verified\":{\"essential\":true},"
-//			+ "\"userid\":{\"essential\":true},"
-//			+ "\"orcid\":{\"essential\":true},"
-//			+ "\"is_certified\":{\"essential\":true},"
-//			+ "\"is_validated\":{\"essential\":true},"
-//			+ "\"validated_given_name\":{\"essential\":true},"
-//			+ "\"validated_family_name\":{\"essential\":true},"
-//			+ "\"validated_location\":{\"essential\":true},"
-//			+ "\"validated_email\":{\"essential\":true},"
-//			+ "\"validated_company\":{\"essential\":true},"
-//			+ "\"validated_at\":{\"essential\":true},"
-//			+ "\"validated_orcid\":{\"essential\":true},"
-//			+ "\"company\":{\"essential\":false}}";
+	private static final String CLAIMS = "{\"team\":{\"values\":[\"3329051\"]},"
+			+ "\"user_name\":{\"essential\":true},"
+			+ "\"family_name\":{\"essential\":true},"
+			+ "\"given_name\":{\"essential\":true},"
+			+ "\"email\":{\"essential\":true},"
+			+ "\"email_verified\":{\"essential\":true},"
+			+ "\"userid\":{\"essential\":true},"
+			+ "\"orcid\":{\"essential\":true},"
+			+ "\"is_certified\":{\"essential\":true},"
+			+ "\"is_validated\":{\"essential\":true},"
+			+ "\"validated_given_name\":{\"essential\":true},"
+			+ "\"validated_family_name\":{\"essential\":true},"
+			+ "\"validated_location\":{\"essential\":true},"
+			+ "\"validated_email\":{\"essential\":true},"
+			+ "\"validated_company\":{\"essential\":true},"
+			+ "\"validated_at\":{\"essential\":true},"
+			+ "\"validated_orcid\":{\"essential\":true},"
+			+ "\"company\":{\"essential\":false}}";
 	
     private static final String AUTHORIZE_URL_SYNAPSE = 
     		"https://signin.synapse.org?response_type=code&client_id=%s&redirect_uri=%s&"+
     		"claims={\"id_token\":"+CLAIMS+",\"userinfo\":"+CLAIMS+"}";
     private static final String AUTHORIZE_URL_SYNAPSE_STAGING = 
-    		"https://signin.synapse.org?response_type=code&client_id=%s&redirect_uri=%s&"+
+    		"https://staging-signin.synapse.org?response_type=code&client_id=%s&redirect_uri=%s&"+
     		"claims={\"id_token\":"+CLAIMS+",\"userinfo\":"+CLAIMS+"}";
     private static final String TOKEN_URL_SYNAPSE = "https://repo-prod.prod.sagebase.org/auth/v1/oauth2/token";
     private static final String TOKEN_URL_SYNAPSE_STAGING = "https://repo-staging.prod.sagebase.org/auth/v1/oauth2/token";
@@ -86,7 +87,7 @@ public class Auth extends HttpServlet {
 	private static final String TOKEN_URL_ORCID = "https://pub.orcid.org/oauth/token";
 
 	private static final String SYNAPSE_OAUTH_USER_INFO_API_URL = "https://repo-prod.prod.sagebase.org/auth/v1/oauth2/userinfo";
-	private static final String SYNAPSE_STAGING_OAUTH_USER_INFO_API_URL = "https://repo-prod.prod.sagebase.org/auth/v1/oauth2/userinfo";
+	private static final String SYNAPSE_STAGING_OAUTH_USER_INFO_API_URL = "https://repo-staging.prod.sagebase.org/auth/v1/oauth2/userinfo";
 	private static final String GOOGLE_OAUTH_USER_INFO_API_URL = "https://www.googleapis.com/oauth2/v2/userinfo";
 	private static final String ORCID_OAUTH_USER_INFO_API_URL = "https://orcid.org/oauth/userinfo";
 	
@@ -181,15 +182,15 @@ public class Auth extends HttpServlet {
 					getAuthorizationUrl(new OAuthConfig(getClientIdOrcid(), null, redirectBackUrl, null, "openid", null));
 			resp.setHeader("Location", redirectUrl+"&state=someRandomStateToPassThrough");
 			resp.setStatus(303);
-		} else if (req.getRequestURI().contains(SYNAPSE_BUTTON_URI)) {
-			String redirectBackUrl = getRedirectBackUrlSynapse(req);
-			String redirectUrl = new OAuth2Api(AUTHORIZE_URL_SYNAPSE, TOKEN_URL_SYNAPSE).
+		} else if (req.getRequestURI().contains(SYNAPSE_BUTTON_STAGING_URI)) {
+			String redirectBackUrl = getRedirectBackUrlSynapseStaging(req);
+			String redirectUrl = new OAuth2Api(AUTHORIZE_URL_SYNAPSE_STAGING, TOKEN_URL_SYNAPSE_STAGING).
 					getAuthorizationUrl(new OAuthConfig(getClientIdSynapse(), null, redirectBackUrl, null, "openid", null));
 			resp.setHeader("Location", redirectUrl+"&state=someRandomStateToPassThrough");
 			resp.setStatus(303);
-		} else if (req.getRequestURI().contains(SYNAPSE_BUTTON_STAGING_URI)) {
-			String redirectBackUrl = getRedirectBackUrlSynapseStaging(req);
-			String redirectUrl = new OAuth2Api(AUTHORIZE_URL_SYNAPSE, TOKEN_URL_SYNAPSE_STAGING).
+		} else if (req.getRequestURI().contains(SYNAPSE_BUTTON_URI)) { // note, this must go after SYNAPSE_BUTTON_STAGING_URI since it's a substring!
+			String redirectBackUrl = getRedirectBackUrlSynapse(req);
+			String redirectUrl = new OAuth2Api(AUTHORIZE_URL_SYNAPSE, TOKEN_URL_SYNAPSE).
 					getAuthorizationUrl(new OAuthConfig(getClientIdSynapse(), null, redirectBackUrl, null, "openid", null));
 			resp.setHeader("Location", redirectUrl+"&state=someRandomStateToPassThrough");
 			resp.setStatus(303);
@@ -306,7 +307,7 @@ public class Auth extends HttpServlet {
 			String authorizationCode = req.getParameter("code");
 			Token accessToken = service.getAccessToken(null, new Verifier(authorizationCode));
 			result = accessToken.getRawResponse();
-		} else if (req.getRequestURI().contains(SYNAPSE_BUTTON_URI)) {
+		} else if (false && req.getRequestURI().contains(SYNAPSE_BUTTON_URI)) {
 			service = (OAuth2Api.BasicOAuth2Service)(new OAuth2Api(AUTHORIZE_URL_SYNAPSE, TOKEN_URL_SYNAPSE)).
 					createService(new OAuthConfig(getClientIdSynapse(), getClientSecretSynapse(), getRedirectBackUrlSynapse(req), null, null, null));
 			String authorizationCode = req.getParameter("code");
@@ -360,11 +361,23 @@ public class Auth extends HttpServlet {
 			}
 			return;
 		} else if (req.getRequestURI().contains(SYNAPSE_BUTTON_STAGING_URI)) {
-			service = (OAuth2Api.BasicOAuth2Service)(new OAuth2Api(AUTHORIZE_URL_SYNAPSE, TOKEN_URL_SYNAPSE_STAGING)).
+			service = (OAuth2Api.BasicOAuth2Service)(new OAuth2Api(AUTHORIZE_URL_SYNAPSE_STAGING, TOKEN_URL_SYNAPSE_STAGING)).
 					createService(new OAuthConfig(getClientIdSynapse(), getClientSecretSynapse(), getRedirectBackUrlSynapseStaging(req), null, null, null));
 			String authorizationCode = req.getParameter("code");
 			Token accessToken = service.getAccessToken(null, new Verifier(authorizationCode));
 			request = new OAuthRequest(Verb.GET, SYNAPSE_STAGING_OAUTH_USER_INFO_API_URL);
+			request.addHeader("Authorization", "Bearer "+accessToken.getToken());
+			Response response = request.send();
+			if(!response.isSuccessful()){
+				throw new Exception("Response code: "+response.getCode()+" Message: "+response.getMessage());
+			}
+			result = response.getBody();
+		} else if (req.getRequestURI().contains(SYNAPSE_BUTTON_URI)) { // note, this must go after SYNAPSE_BUTTON_STAGING_URI since it's a substring!
+			service = (OAuth2Api.BasicOAuth2Service)(new OAuth2Api(AUTHORIZE_URL_SYNAPSE, TOKEN_URL_SYNAPSE)).
+					createService(new OAuthConfig(getClientIdSynapse(), getClientSecretSynapse(), getRedirectBackUrlSynapse(req), null, null, null));
+			String authorizationCode = req.getParameter("code");
+			Token accessToken = service.getAccessToken(null, new Verifier(authorizationCode));
+			request = new OAuthRequest(Verb.GET, SYNAPSE_OAUTH_USER_INFO_API_URL);
 			request.addHeader("Authorization", "Bearer "+accessToken.getToken());
 			Response response = request.send();
 			if(!response.isSuccessful()){
