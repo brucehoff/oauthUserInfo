@@ -21,6 +21,7 @@ import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.lang.StringUtils;
 import org.json.JSONObject;
 import org.scribe.model.OAuthConfig;
@@ -72,10 +73,10 @@ public class Auth extends HttpServlet {
 			+ "\"company\":{\"essential\":false}}";
 	
     private static final String AUTHORIZE_URL_SYNAPSE = 
-    		"https://signin.synapse.org?response_type=code&client_id=%s&redirect_uri=%s&"+
+    		"https://signin.synapse.org?client_id=%s&redirect_uri=%s&"+
     		"claims={\"id_token\":"+CLAIMS+",\"userinfo\":"+CLAIMS+"}";
     private static final String AUTHORIZE_URL_SYNAPSE_STAGING = 
-    		"https://staging-signin.synapse.org?response_type=code&client_id=%s&redirect_uri=%s&"+
+    		"https://staging-signin.synapse.org?client_id=%s&redirect_uri=%s&"+
     		"claims={\"id_token\":"+CLAIMS+",\"userinfo\":"+CLAIMS+"}";
     private static final String TOKEN_URL_SYNAPSE = "https://repo-prod.prod.sagebase.org/auth/v1/oauth2/token";
     private static final String TOKEN_URL_SYNAPSE_STAGING = "https://repo-staging.prod.sagebase.org/auth/v1/oauth2/token";
@@ -90,6 +91,14 @@ public class Auth extends HttpServlet {
 	private static final String SYNAPSE_STAGING_OAUTH_USER_INFO_API_URL = "https://repo-staging.prod.sagebase.org/auth/v1/oauth2/userinfo";
 	private static final String GOOGLE_OAUTH_USER_INFO_API_URL = "https://www.googleapis.com/oauth2/v2/userinfo";
 	private static final String ORCID_OAUTH_USER_INFO_API_URL = "https://orcid.org/oauth/userinfo";
+	
+	
+	private static final String SYNAPSE_OAUTH_REVOCATION_API_URL = "https://repo-prod.prod.sagebase.org/auth/v1/oauth2/revoke";
+	private static final String SYNAPSE_STAGING_OAUTH_REVOCATION_API_URL = "https://repo-staging.prod.sagebase.org/auth/v1/oauth2/revoke";
+	
+	private static final String SYNAPSE_TOKEN_METADATA_URL_PREFIX = "https://repo-prod.prod.sagebase.org/auth/v1/oauth2/token/";
+	private static final String SYNAPSE_STAGING_TOKEN_METADATA_URL_PREFIX = "https://repo-staging.prod.sagebase.org/auth/v1/oauth2/token/";
+	private static final String SYNAPSE_TOKEN_METADATA_URL_SUFFIX = "/metadata";
 	
 	private static final String SCOPE_EMAIL = "email";
 
@@ -168,6 +177,18 @@ public class Auth extends HttpServlet {
 		return result;
 	}
 	
+	private static boolean forceAuth(String requestURI) {
+		return requestURI.contains("ForceAuth");
+	}
+	
+	private static final String FORCE_AUTH_PARAM = "&prompt=login";
+	
+	private static boolean omitCode(String requestURI) {
+		return requestURI.contains("OmitCode");
+	}
+	
+	private static final String RESPONSE_TYPE_PARAM = "&response_type=code";
+	
 	private void doPostIntern(HttpServletRequest req, HttpServletResponse resp)
 			throws IOException {
 		if (req.getRequestURI().contains(GOOGLE_BUTTON_URI)) {
@@ -184,14 +205,20 @@ public class Auth extends HttpServlet {
 			resp.setStatus(303);
 		} else if (req.getRequestURI().contains(SYNAPSE_BUTTON_STAGING_URI)) {
 			String redirectBackUrl = getRedirectBackUrlSynapseStaging(req);
-			String redirectUrl = new OAuth2Api(AUTHORIZE_URL_SYNAPSE_STAGING, TOKEN_URL_SYNAPSE_STAGING).
-					getAuthorizationUrl(new OAuthConfig(getClientIdSynapse(), null, redirectBackUrl, null, "openid", null));
+			String authorizeURL = AUTHORIZE_URL_SYNAPSE_STAGING;
+			if (forceAuth(req.getRequestURI())) authorizeURL += FORCE_AUTH_PARAM;
+			if (!omitCode(req.getRequestURI())) authorizeURL += RESPONSE_TYPE_PARAM;
+			String redirectUrl = new OAuth2Api(authorizeURL, TOKEN_URL_SYNAPSE_STAGING).
+					getAuthorizationUrl(new OAuthConfig(getClientIdSynapse(), null, redirectBackUrl, null, "openid view download authorize offline_access", null));
 			resp.setHeader("Location", redirectUrl+"&state=someRandomStateToPassThrough");
 			resp.setStatus(303);
 		} else if (req.getRequestURI().contains(SYNAPSE_BUTTON_URI)) { // note, this must go after SYNAPSE_BUTTON_STAGING_URI since it's a substring!
 			String redirectBackUrl = getRedirectBackUrlSynapse(req);
-			String redirectUrl = new OAuth2Api(AUTHORIZE_URL_SYNAPSE, TOKEN_URL_SYNAPSE).
-					getAuthorizationUrl(new OAuthConfig(getClientIdSynapse(), null, redirectBackUrl, null, "openid", null));
+			String authorizeURL = AUTHORIZE_URL_SYNAPSE;
+			if (forceAuth(req.getRequestURI())) authorizeURL += FORCE_AUTH_PARAM;
+			if (!omitCode(req.getRequestURI())) authorizeURL += RESPONSE_TYPE_PARAM;
+			String redirectUrl = new OAuth2Api(authorizeURL, TOKEN_URL_SYNAPSE).
+					getAuthorizationUrl(new OAuthConfig(getClientIdSynapse(), null, redirectBackUrl, null, "openid view download authorize offline_access", null));
 			resp.setHeader("Location", redirectUrl+"&state=someRandomStateToPassThrough");
 			resp.setStatus(303);
 		} else {
@@ -279,6 +306,11 @@ public class Auth extends HttpServlet {
 		String unsignedToken = pieces[0]+"."+pieces[1]+".";
 		return Jwts.parser().parseClaimsJwt(unsignedToken);
 	}
+	
+	public static String getRefreshTokenID(String accessToken) {
+		Jwt<Header,Claims> jwt = parseJWT(accessToken);
+		return (String)jwt.getBody().get("refresh_token_id");
+	}
 		
 	private void doGetIntern(HttpServletRequest req, HttpServletResponse resp)
 				throws Exception {
@@ -286,6 +318,23 @@ public class Auth extends HttpServlet {
 		OAuth2Api.BasicOAuth2Service service = null;
 		OAuthRequest request = null;
 		String result = null;
+		Claims idTokenClaims = null;
+		TokenResponse tokenResponse = null;
+		String tokenMetadata = null;
+		Response response = null;
+		String capturedAccessToken = null;
+		if (StringUtils.isNotEmpty(req.getParameter("error"))) {
+			resp.setContentType("text/plain");
+			try (ServletOutputStream os=resp.getOutputStream()) {
+				os.println();
+				os.println("error:");
+				os.println(req.getParameter("error"));
+				
+				os.println();
+			}
+			resp.setStatus(200);
+			return;
+		}
 		if (req.getRequestURI().contains(GOOGLE_BUTTON_URI)) {
 			service = (OAuth2Api.BasicOAuth2Service)(new OAuth2Api(AUTHORIZE_URL_GOOGLE, TOKEN_URL_GOOGLE)).
 					createService(new OAuthConfig(getClientIdGoogle(), getClientSecretGoogle(), getRedirectBackUrlGoogle(req), null, null, null));
@@ -294,7 +343,7 @@ public class Auth extends HttpServlet {
 			Token accessToken = service.getAccessToken(null, new Verifier(authorizationCode));
 			// Use the access token to get the UserInfo from Google.
 			service.signRequest(accessToken, request);
-			Response response = request.send();
+			response = request.send();
 			if(!response.isSuccessful()){
 				throw new Exception("Response code: "+response.getCode()+" Message: "+response.getMessage());
 			}
@@ -311,10 +360,10 @@ public class Auth extends HttpServlet {
 			service = (OAuth2Api.BasicOAuth2Service)(new OAuth2Api(AUTHORIZE_URL_SYNAPSE, TOKEN_URL_SYNAPSE)).
 					createService(new OAuthConfig(getClientIdSynapse(), getClientSecretSynapse(), getRedirectBackUrlSynapse(req), null, null, null));
 			String authorizationCode = req.getParameter("code");
-			Token idToken = service.getIdToken(null, new Verifier(authorizationCode));
+			tokenResponse = service.getTokenResponse(null, new Verifier(authorizationCode));
 			
 			// parse ID Token
-			Jwt<Header,Claims> jwt = parseJWT(idToken.getToken());
+			Jwt<Header,Claims> jwt = parseJWT(tokenResponse.getIdToken());
 			String synapseUserId = jwt.getBody().get("userid", String.class);
 			// check if a member of 273957.  If not, don't proceed
 			List<String> teamIds = jwt.getBody().get("team", List.class);
@@ -323,7 +372,7 @@ public class Auth extends HttpServlet {
 			if (isInDesignatedTeam) {
 				// get STS token
 				AssumeRoleWithWebIdentityRequest assumeRoleWithWebIdentityRequest = new AssumeRoleWithWebIdentityRequest();
-				assumeRoleWithWebIdentityRequest.setWebIdentityToken(idToken.getToken());
+				assumeRoleWithWebIdentityRequest.setWebIdentityToken(tokenResponse.getIdToken());
 				assumeRoleWithWebIdentityRequest.setRoleArn("arn:aws:iam::563295687221:role/Service_Catalog_Role");
 				assumeRoleWithWebIdentityRequest.setRoleSessionName(synapseUserId);
 				AWSSecurityTokenService stsClient = AWSSecurityTokenServiceClientBuilder.standard().withRegion(Regions.US_EAST_1)
@@ -360,41 +409,125 @@ public class Auth extends HttpServlet {
 				resp.setStatus(200);
 			}
 			return;
-		} else if (req.getRequestURI().contains(SYNAPSE_BUTTON_STAGING_URI)) {
-			service = (OAuth2Api.BasicOAuth2Service)(new OAuth2Api(AUTHORIZE_URL_SYNAPSE_STAGING, TOKEN_URL_SYNAPSE_STAGING)).
-					createService(new OAuthConfig(getClientIdSynapse(), getClientSecretSynapse(), getRedirectBackUrlSynapseStaging(req), null, null, null));
+		} else if (req.getRequestURI().contains(SYNAPSE_BUTTON_STAGING_URI) || req.getRequestURI().contains(SYNAPSE_BUTTON_URI)) {
+			String authorizeURL=null;
+			String tokenURL=null;
+			String redirectBackUrl=null;
+			String userInfoEndpoint=null;
+			String revocationUrl=null;
+			String tokenMetaDataPrefix=null;
+			if (req.getRequestURI().contains(SYNAPSE_BUTTON_STAGING_URI)) {
+				authorizeURL = AUTHORIZE_URL_SYNAPSE_STAGING;
+				tokenURL=TOKEN_URL_SYNAPSE_STAGING;
+				redirectBackUrl=getRedirectBackUrlSynapseStaging(req);
+				userInfoEndpoint=SYNAPSE_STAGING_OAUTH_USER_INFO_API_URL;
+				revocationUrl=SYNAPSE_STAGING_OAUTH_REVOCATION_API_URL;
+				tokenMetaDataPrefix = SYNAPSE_STAGING_TOKEN_METADATA_URL_PREFIX;
+			} else {
+				authorizeURL = AUTHORIZE_URL_SYNAPSE;
+				tokenURL=TOKEN_URL_SYNAPSE;
+				redirectBackUrl=getRedirectBackUrlSynapse(req);
+				userInfoEndpoint=SYNAPSE_OAUTH_USER_INFO_API_URL;
+				revocationUrl=SYNAPSE_OAUTH_REVOCATION_API_URL;
+				tokenMetaDataPrefix = SYNAPSE_TOKEN_METADATA_URL_PREFIX;
+			}
+			service = (OAuth2Api.BasicOAuth2Service)(new OAuth2Api(authorizeURL, tokenURL)).
+					createService(new OAuthConfig(getClientIdSynapse(), getClientSecretSynapse(), redirectBackUrl, null, null, null));
 			String authorizationCode = req.getParameter("code");
-			Token accessToken = service.getAccessToken(null, new Verifier(authorizationCode));
-			request = new OAuthRequest(Verb.GET, SYNAPSE_STAGING_OAUTH_USER_INFO_API_URL);
-			request.addHeader("Authorization", "Bearer "+accessToken.getToken());
-			Response response = request.send();
+			tokenResponse = service.getTokenResponse(null, new Verifier(authorizationCode));
+			String accessToken = tokenResponse.getToken();
+			String refreshTokenId = getRefreshTokenID(accessToken);
+			String refreshToken = tokenResponse.getRefreshToken();
+			String idToken = tokenResponse.getIdToken();
+			Jwt<Header,Claims> idTokenJwt = parseJWT(idToken);
+			idTokenClaims = idTokenJwt.getBody();
+			
+			// use the refresh token to get a new access token
+			TokenResponse tokenResponse2 = service.getTokenResponseForRefreshToken(null, new Verifier(refreshToken));
+			
+			// verify that access token has changed
+			if (accessToken.equals(tokenResponse2.getToken())) 
+				throw new RuntimeException("Access token has not changed");
+			if (!refreshTokenId.equals(getRefreshTokenID(tokenResponse2.getToken()))) {
+				throw new RuntimeException("access tokens have different refresh token IDs.");
+			}
+			// verify that refresh token has changed
+			if (refreshToken.equals(tokenResponse2.getIdToken())) {
+				throw new RuntimeException("refresh token has not changed");
+			}
+			
+			// verify that previous refresh token does not work
+			try {
+				service.getTokenResponseForRefreshToken(null, new Verifier(refreshToken));
+				throw new RuntimeException("Previous refresh token still works but should not!");
+			} catch (Exception e) {
+				// as expected
+			}
+			
+			// verify that original access token still works
+			request = new OAuthRequest(Verb.GET, userInfoEndpoint);
+			request.addHeader("Authorization", "Bearer "+accessToken);
+			response = request.send();
 			if(!response.isSuccessful()){
-				throw new Exception("Response code: "+response.getCode()+" Message: "+response.getMessage());
+				throw new RuntimeException("Response code: "+response.getCode()+" Message: "+response.getMessage());
 			}
 			result = response.getBody();
-		} else if (req.getRequestURI().contains(SYNAPSE_BUTTON_URI)) { // note, this must go after SYNAPSE_BUTTON_STAGING_URI since it's a substring!
-			service = (OAuth2Api.BasicOAuth2Service)(new OAuth2Api(AUTHORIZE_URL_SYNAPSE, TOKEN_URL_SYNAPSE)).
-					createService(new OAuthConfig(getClientIdSynapse(), getClientSecretSynapse(), getRedirectBackUrlSynapse(req), null, null, null));
-			String authorizationCode = req.getParameter("code");
-			Token accessToken = service.getAccessToken(null, new Verifier(authorizationCode));
-			request = new OAuthRequest(Verb.GET, SYNAPSE_OAUTH_USER_INFO_API_URL);
-			request.addHeader("Authorization", "Bearer "+accessToken.getToken());
-			Response response = request.send();
+			
+			// get refresh token metadata
+			request = new OAuthRequest(Verb.GET, tokenMetaDataPrefix+refreshTokenId+SYNAPSE_TOKEN_METADATA_URL_SUFFIX);
+			String s = getClientIdSynapse()+":"+getClientSecretSynapse();
+			request.addHeader("Authorization", "Basic "+Base64.encodeBase64String(s.getBytes()));
+			response = request.send();
 			if(!response.isSuccessful()){
-				throw new Exception("Response code: "+response.getCode()+" Message: "+response.getMessage());
+				throw new RuntimeException("Response code: "+response.getCode()+" Message: "+response.getMessage());
 			}
-			result = response.getBody();
+			tokenMetadata = response.getBody();
+			
+//			// revoke refresh token and access tokens
+//			request = new OAuthRequest(Verb.POST, revocationUrl);
+//			request.addHeader("Authorization", "Basic "+Base64.encodeBase64String(s.getBytes()));
+//			request.addHeader("Content-Type", "application/json");
+//			JSONObject revocationPayload = new JSONObject();
+//			revocationPayload.put("token", tokenResponse2.getRefreshToken());
+//			revocationPayload.put("token_type_hint", "refresh_token");
+//			request.addPayload(revocationPayload.toString());
+//			response = request.send();
+//			if (!response.isSuccessful()) {
+//				throw new RuntimeException("Revocation failed.  Response code: "+response.getCode()+" Message: "+response.getMessage());
+//			}
+//			
+//			// try to use last access token, verifying that it doesn't work
+//			request = new OAuthRequest(Verb.GET, userInfoEndpoint);
+//			request.addHeader("Authorization", "Bearer "+accessToken);
+//			response = request.send();
+//			if(response.isSuccessful()){
+//				throw new RuntimeException("Access token should not work but does!");
+//			}
+			capturedAccessToken=accessToken;
 		} else {
 			throw new RuntimeException("Unexpected URI "+req.getRequestURI());
 		}
-		// we don't reach this point for Synapse login
 		JSONObject json = new JSONObject(result);
 		logger.log(Level.WARNING, result);
 		resp.setContentType("text/plain");
 		try (ServletOutputStream os=resp.getOutputStream()) {
+			os.println("id_token:");
+			for (String key: idTokenClaims.keySet()) {
+				os.println(key+" "+idTokenClaims.get(key));
+			}
+			os.println("\nUserinfo:");
 			for (String key: json.keySet()) {
 				os.println(key+" "+json.get(key));
 			}
+			os.println();
+//			os.println("Refresh token metadata:");
+//			os.println(tokenMetadata);
+			
+//			os.println();
+//			os.println("access token: "+capturedAccessToken);
+//			os.println("Response from attempting to use revoked access token:");
+//			os.println(""+response.getCode());
+//			os.println(response.getBody());
 		}
 		resp.setStatus(200);
 	}

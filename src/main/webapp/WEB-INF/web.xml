@@ -23,6 +23,22 @@
 		<servlet-name>oauthUserInfo</servlet-name>
 		<url-pattern>/oauthUserInfoSynapseStaging</url-pattern>
 	</servlet-mapping>
+	<servlet-mapping>
+		<servlet-name>oauthUserInfo</servlet-name>
+		<url-pattern>/oauthUserInfoSynapseForceAuth</url-pattern>
+	</servlet-mapping>
+	<servlet-mapping>
+		<servlet-name>oauthUserInfo</servlet-name>
+		<url-pattern>/oauthUserInfoSynapseStagingForceAuth</url-pattern>
+	</servlet-mapping>
+	<servlet-mapping>
+		<servlet-name>oauthUserInfo</servlet-name>
+		<url-pattern>/oauthUserInfoSynapseOmitCode</url-pattern>
+	</servlet-mapping>
+	<servlet-mapping>
+		<servlet-name>oauthUserInfo</servlet-name>
+		<url-pattern>/oauthUserInfoSynapseStagingOmitCode</url-pattern>
+	</servlet-mapping>
 
 	<servlet>
 		<servlet-name>forbidden</servlet-name>
