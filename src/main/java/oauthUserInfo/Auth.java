@@ -53,24 +53,29 @@ public class Auth extends HttpServlet {
 //	private static final String CLAIMS = "{\"team\":{\"values\":[\""+REQUIRED_SYNAPSE_TEAM_ID+"\"]},"
 //			+ "\"userid\":{\"essential\":true}}";
 	
-	private static final String CLAIMS = "{\"team\":{\"values\":[\"3329051\"]},"
-			+ "\"user_name\":{\"essential\":true},"
-			+ "\"family_name\":{\"essential\":true},"
-			+ "\"given_name\":{\"essential\":true},"
-			+ "\"email\":{\"essential\":true},"
-			+ "\"email_verified\":{\"essential\":true},"
-			+ "\"userid\":{\"essential\":true},"
-			+ "\"orcid\":{\"essential\":true},"
-			+ "\"is_certified\":{\"essential\":true},"
-			+ "\"is_validated\":{\"essential\":true},"
-			+ "\"validated_given_name\":{\"essential\":true},"
-			+ "\"validated_family_name\":{\"essential\":true},"
-			+ "\"validated_location\":{\"essential\":true},"
-			+ "\"validated_email\":{\"essential\":true},"
-			+ "\"validated_company\":{\"essential\":true},"
-			+ "\"validated_at\":{\"essential\":true},"
-			+ "\"validated_orcid\":{\"essential\":true},"
-			+ "\"company\":{\"essential\":false}}";
+//	private static final String CLAIMS = "{\"team\":{\"values\":[\"3329051\"]},"
+//			+ "\"user_name\":{\"essential\":true},"
+//			+ "\"family_name\":{\"essential\":true},"
+//			+ "\"given_name\":{\"essential\":true},"
+//			+ "\"email\":{\"essential\":true},"
+//			+ "\"email_verified\":{\"essential\":true},"
+//			+ "\"userid\":{\"essential\":true},"
+//			+ "\"orcid\":{\"essential\":true},"
+//			+ "\"is_certified\":{\"essential\":true},"
+//			+ "\"is_validated\":{\"essential\":true},"
+//			+ "\"validated_given_name\":{\"essential\":true},"
+//			+ "\"validated_family_name\":{\"essential\":true},"
+//			+ "\"validated_location\":{\"essential\":true},"
+//			+ "\"validated_email\":{\"essential\":true},"
+//			+ "\"validated_company\":{\"essential\":true},"
+//			+ "\"validated_at\":{\"essential\":true},"
+//			+ "\"validated_orcid\":{\"essential\":true},"
+//			+ "\"company\":{\"essential\":false}}";	
+	
+	private static final String CLAIMS = "{"
+					+"\"ga4gh_passport_v1\":{\"values\":[\"https://repo-prod.prod.sagebase.org/repo/v1/accessRequirement/12345\"]},"
+					+ "\"email\":{\"essential\":true},"
+					+ "\"userid\":{\"essential\":true}}";
 	
     private static final String AUTHORIZE_URL_SYNAPSE = 
     		"https://signin.synapse.org?client_id=%s&redirect_uri=%s&"+
