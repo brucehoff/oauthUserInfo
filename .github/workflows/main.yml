@@ -37,7 +37,10 @@ jobs:
         java-version: 8
         cache: maven
         
-    - run: mvn package appengine:deploy -Dapp.deploy.projectId=oauthuserinfo
+    
+    - run: |
+        gcloud components install app-engine-java
+        mvn package appengine:deploy -Dapp.deploy.projectId=oauthuserinfo
       
 
 ...
