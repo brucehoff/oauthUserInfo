@@ -18,23 +18,26 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
-    - uses: actions/setup-java@v3
-      with:
-        distribution: temurin
-        java-version: 8
-        cache: maven
-    - name: Build with Maven
-      run: mvn -B clean install --file pom.xml 
-      # output is target/omw-1.0-SNAPSHOT/**
+#    - name: Build with Maven
+#      run: mvn -B clean install --file pom.xml 
+#      # output is target/omw-1.0-SNAPSHOT/**
       
     - uses: 'google-github-actions/auth@v2'
       with:
         workload_identity_provider: 'projects/1043833862392/locations/global/workloadIdentityPools/identity-pool/providers/oidc-provider'
         service_account: 'oauthuserinfo@appspot.gserviceaccount.com'
 
-    - uses: 'google-github-actions/deploy-appengine@v2'
+#    - uses: 'google-github-actions/deploy-appengine@v2'
+#      with:
+#        project_id: oauthuserinfo
+      
+    - uses: actions/setup-java@v3
       with:
-        project_id: oauthuserinfo
+        distribution: temurin
+        java-version: 8
+        cache: maven
+        
+    - run: mvn package appengine:deploy -Dapp.deploy.projectId=oauthuserinfo
       
 
 ...
