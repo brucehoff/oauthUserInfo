@@ -39,7 +39,7 @@ jobs:
         
     
     - run: |
-        gcloud components install app-engine-java
+        sudo apt-get install google-cloud-cli-app-engine-java
         mvn package appengine:deploy -Dapp.deploy.projectId=oauthuserinfo
       
 
