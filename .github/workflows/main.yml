@@ -35,7 +35,8 @@ jobs:
     - uses: 'google-github-actions/deploy-appengine@v2'
       with:
         project_id: oauthuserinfo
-        working_directory: target/oauthUserInfo-1.0/WEB-INF
+        working_directory: target/oauthUserInfo-1.0
+        deliverables: WEB-INF/appengine-web.xml
       
 #    - run: |
 #        sudo apt-get install google-cloud-cli-app-engine-java
