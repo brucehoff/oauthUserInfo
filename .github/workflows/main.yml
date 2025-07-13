@@ -26,7 +26,7 @@ jobs:
       
     - uses: 'google-github-actions/auth@v2'
       with:
-#        workload_identity_provider: 'projects/123456789/locations/global/workloadIdentityPools/my-pool/providers/my-provider'
+        workload_identity_provider: 'projects/1043833862392/locations/global/workloadIdentityPools/identity-pool/providers/oidc-provider'
         service_account: 'oauthuserinfo@appspot.gserviceaccount.com'
 
     - uses: 'google-github-actions/deploy-appengine@v2'
