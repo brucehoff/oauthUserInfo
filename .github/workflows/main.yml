@@ -18,29 +18,26 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
-#    - name: Build with Maven
-#      run: mvn -B clean install --file pom.xml 
-#      # output is target/omw-1.0-SNAPSHOT/**
-      
-    - uses: 'google-github-actions/auth@v2'
-      with:
-        workload_identity_provider: 'projects/1043833862392/locations/global/workloadIdentityPools/identity-pool/providers/oidc-provider'
-        service_account: 'oauthuserinfo@appspot.gserviceaccount.com'
-
-#    - uses: 'google-github-actions/deploy-appengine@v2'
-#      with:
-#        project_id: oauthuserinfo
-      
     - uses: actions/setup-java@v3
       with:
         distribution: temurin
         java-version: 8
         cache: maven
         
-    
-    - run: |
-        sudo apt-get install google-cloud-cli-app-engine-java
-        mvn package appengine:deploy -Dapp.deploy.projectId=oauthuserinfo
+    - name: Build with Maven
+      run: mvn -B clean install --file pom.xml 
       
+    - uses: 'google-github-actions/auth@v2'
+      with:
+        workload_identity_provider: 'projects/1043833862392/locations/global/workloadIdentityPools/identity-pool/providers/oidc-provider'
+        service_account: 'oauthuserinfo@appspot.gserviceaccount.com'
 
+    - uses: 'google-github-actions/deploy-appengine@v2'
+      with:
+        project_id: oauthuserinfo
+        working_directory: target/omw-1.0-SNAPSHOT/**
+      
+#    - run: |
+#        sudo apt-get install google-cloud-cli-app-engine-java
+#        mvn package appengine:deploy -Dapp.deploy.projectId=oauthuserinfo
 ...
