@@ -38,7 +38,4 @@ jobs:
         working_directory: target/oauthUserInfo-1.0
         deliverables: WEB-INF/appengine-web.xml
       
-#    - run: |
-#        sudo apt-get install google-cloud-cli-app-engine-java
-#        mvn package appengine:deploy -Dapp.deploy.projectId=oauthuserinfo
 ...
